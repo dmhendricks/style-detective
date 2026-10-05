@@ -2,6 +2,7 @@
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/dmhendricks/style-detective/release.yml?style=flat-square)](https://github.com/dmhendricks/style-detective/actions)
 [![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/fbfplfafboelbaogjidoamdjjcckemib?style=flat-square)](https://chromewebstore.google.com/detail/style-detective/fbfplfafboelbaogjidoamdjjcckemib)
 [![License](https://img.shields.io/github/license/dmhendricks/style-detective.svg?style=flat-square)](https://github.com/dmhendricks/style-detective/blob/main/LICENSE)
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa.svg?logo=github-sponsors&logoColor=white)](https://github.com/sponsors/dmhendricks)
 
 # Style Detective
 
