@@ -202,6 +202,30 @@ export async function savePanelThemePreference(theme: PanelThemePreference): Pro
     await localSet({ [PANEL_THEME_KEY]: panelThemeSchema.parse(theme) });
 }
 
+/**
+ * OS dark-mode flag as seen by a top-level frame. Inside an iframe,
+ * prefers-color-scheme follows the embedding <iframe>'s used color-scheme
+ * (pages can force `color-scheme: light` on it), so iframes read this instead.
+ */
+export const SYSTEM_PREFERS_DARK_KEY = 'systemPrefersDark';
+
+export const systemPrefersDarkSchema = z.boolean();
+
+export function parseSystemPrefersDark(value: unknown): boolean | undefined {
+    const result = systemPrefersDarkSchema.safeParse(value);
+    return result.success ? result.data : undefined;
+}
+
+/** Undefined until a top-level frame has reported (or after a bad write). */
+export async function loadSystemPrefersDark(): Promise<boolean | undefined> {
+    const stored = await localGet(SYSTEM_PREFERS_DARK_KEY);
+    return parseSystemPrefersDark(stored?.[SYSTEM_PREFERS_DARK_KEY]);
+}
+
+export async function saveSystemPrefersDark(dark: boolean): Promise<void> {
+    await localSet({ [SYSTEM_PREFERS_DARK_KEY]: systemPrefersDarkSchema.parse(dark) });
+}
+
 /** Resolve a stored preference to the concrete scheme applied to the overlay. */
 export function resolvePanelTheme(
     preference: PanelThemePreference,

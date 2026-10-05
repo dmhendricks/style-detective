@@ -43,15 +43,18 @@ import {
     loadPanelFontSize,
     loadPanelThemePreference,
     loadShowBoxModel,
+    loadSystemPrefersDark,
     loadShowCssClasses,
     parseClassesChipLines,
     parsePanelFontSize,
     parsePanelTheme,
     parseShowBoxModel,
     parseShowCssClasses,
+    parseSystemPrefersDark,
     resolvePanelTheme,
     savePanelFontSize,
     saveShowCssClasses,
+    saveSystemPrefersDark,
     type PanelThemePreference,
     CLASSES_CHIP_LINES_KEY,
     PANEL_FONT_SIZE_DEFAULT,
@@ -60,6 +63,7 @@ import {
     PANEL_THEME_KEY,
     SHOW_BOX_MODEL_KEY,
     SHOW_CSS_CLASSES_KEY,
+    SYSTEM_PREFERS_DARK_KEY,
 } from '../shared/prefs';
 import { MessageType, Messages, parseExtensionMessage } from '../shared/messages';
 import {
@@ -77,8 +81,16 @@ type Pointer = { clientX: number; clientY: number };
 const HOVER_LISTENER_OPTS: AddEventListenerOptions = { capture: true, passive: true };
 const HIGHLIGHT_LAYOUT_OPTS: AddEventListenerOptions = { capture: true, passive: true };
 
+const IS_TOP_FRAME = window === window.top;
+
+const SYSTEM_DARK_QUERY = '(prefers-color-scheme: dark)';
+
+/**
+ * Only trustworthy in the top frame: inside an iframe this follows the
+ * embedding <iframe>'s color-scheme, not the OS (see SYSTEM_PREFERS_DARK_KEY).
+ */
 function systemPrefersDark(): boolean {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return window.matchMedia(SYSTEM_DARK_QUERY).matches;
 }
 
 function eventTargetElement(e: Event): HTMLElement | null {
@@ -261,6 +273,8 @@ class OverlayController {
     private panelFontSize = PANEL_FONT_SIZE_DEFAULT;
     private panelThemePreference: PanelThemePreference = 'system';
     private systemThemeMedia: MediaQueryList | null = null;
+    /** OS dark mode — measured in the top frame, relayed via storage to iframes. */
+    private systemIsDark = systemPrefersDark();
 
     private flashMessageTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -377,7 +391,7 @@ class OverlayController {
         this.addHighlightLayoutListeners();
         // Panel opens on the next hover/move in this frame (no dormant
         // mousemove tracker — see notePointer). Cue engagement immediately.
-        if (window === window.top) {
+        if (IS_TOP_FRAME) {
             this.flashMessage(
                 'Style Detective loaded! Hover any element you want to inspect in the page.',
                 { persistent: true },
@@ -453,8 +467,21 @@ class OverlayController {
     }
 
     private async loadPanelThemePref(): Promise<void> {
-        this.panelThemePreference = await loadPanelThemePreference();
-        this.bindSystemThemeListener();
+        const [preference, storedSystemDark] = await Promise.all([
+            loadPanelThemePreference(),
+            loadSystemPrefersDark(),
+        ]);
+        this.panelThemePreference = preference;
+
+        if (IS_TOP_FRAME) {
+            // Skip redundant writes — every frame in every tab hears onChanged.
+            if (storedSystemDark !== this.systemIsDark) {
+                void saveSystemPrefersDark(this.systemIsDark);
+            }
+            this.bindSystemThemeListener();
+        } else if (storedSystemDark !== undefined) {
+            this.systemIsDark = storedSystemDark;
+        }
     }
 
     private async loadShowCssClassesPref(): Promise<void> {
@@ -509,8 +536,16 @@ class OverlayController {
             const themeChange = changes[PANEL_THEME_KEY];
             if (themeChange) {
                 this.panelThemePreference = parsePanelTheme(themeChange.newValue);
-                this.bindSystemThemeListener();
                 this.applyPanelTheme();
+            }
+
+            const systemDarkChange = changes[SYSTEM_PREFERS_DARK_KEY];
+            if (systemDarkChange && !IS_TOP_FRAME) {
+                const next = parseSystemPrefersDark(systemDarkChange.newValue);
+                if (next !== undefined && next !== this.systemIsDark) {
+                    this.systemIsDark = next;
+                    this.applyPanelTheme();
+                }
             }
 
             const chipLinesChange = changes[CLASSES_CHIP_LINES_KEY];
@@ -531,18 +566,20 @@ class OverlayController {
         });
     }
 
+    /** Top frame only — publishes OS theme changes for iframes to pick up. */
     private bindSystemThemeListener(): void {
         if (!this.systemThemeMedia) {
-            this.systemThemeMedia = window.matchMedia('(prefers-color-scheme: dark)');
-            this.systemThemeMedia.addEventListener('change', () => {
-                if (this.panelThemePreference !== 'system') return;
+            this.systemThemeMedia = window.matchMedia(SYSTEM_DARK_QUERY);
+            this.systemThemeMedia.addEventListener('change', (e) => {
+                this.systemIsDark = e.matches;
+                void saveSystemPrefersDark(e.matches);
                 this.applyPanelTheme();
             });
         }
     }
 
     private appliedPanelTheme(): 'light' | 'dark' {
-        return resolvePanelTheme(this.panelThemePreference, systemPrefersDark());
+        return resolvePanelTheme(this.panelThemePreference, this.systemIsDark);
     }
 
     private applyPanelFontSize(): void {
