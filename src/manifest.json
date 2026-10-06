@@ -1,7 +1,7 @@
 {
     "name": "Style Detective",
     "manifest_version": 3,
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Hover over any HTML element to inspect its computed CSS in a floating panel.",
     "homepage_url": "https://github.com/dmhendricks/style-detective",
     "icons": {

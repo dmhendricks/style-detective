@@ -1,7 +1,7 @@
 {
   "name": "style-detective",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "Hover over any HTML element to inspect its computed CSS in a floating panel.",
   "license": "GPL-2.0",
