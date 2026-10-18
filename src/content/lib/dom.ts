@@ -7,7 +7,7 @@
 
 import { copyTextToClipboard } from './clipboard';
 import { notifyCopy } from './copy-feedback';
-import { extractFirstCssGradient } from './format';
+import { extractFirstCssGradient, parseCssColor } from './format';
 import { FROZEN_CLASS, OVERLAY_ID } from '../../shared/dom-ids';
 
 /** Tag names we construct, mapped to their element types for `el()`. */
@@ -218,16 +218,83 @@ export function pierceOpenShadow(
     return current;
 }
 
+/** Pseudo-element style subset read by `isInvisibleOverlayStyle`. */
+export type OverlayPseudoStyle = Pick<
+    CSSStyleDeclaration,
+    'content' | 'position' | 'backgroundImage' | 'backgroundColor' | 'opacity'
+>;
+
+/**
+ * True for a positioned ::before/::after that paints nothing you'd notice: no
+ * generated text or image and a see-through background. Typical of the
+ * "stretched link" pattern (`a::after { position: absolute; inset: 0 }`) that
+ * extends a link's click area over its positioned container.
+ */
+export function isInvisibleOverlayStyle(style: OverlayPseudoStyle): boolean {
+    // `none`/`normal` → the pseudo-element isn't generated at all.
+    if (style.content === 'none' || style.content === 'normal') return false;
+    if (style.position !== 'absolute' && style.position !== 'fixed') return false;
+    if (style.opacity === '0') return true;
+    if (style.content !== '""' && style.content !== "''") return false;
+    if (style.backgroundImage !== 'none') return false;
+    const bg = parseCssColor(style.backgroundColor);
+    return bg !== null && bg.a < 0.5;
+}
+
+function pointInClientRects(el: Element, clientX: number, clientY: number): boolean {
+    for (const rect of el.getClientRects()) {
+        if (
+            clientX >= rect.left &&
+            clientX <= rect.right &&
+            clientY >= rect.top &&
+            clientY <= rect.bottom
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * True when `el` is hit only through an invisible positioned pseudo-element:
+ * the point is outside its own boxes (per line, for wrapped inline links), so
+ * what's visible there is whatever the overlay covers.
+ */
+function isHitThroughInvisibleOverlay(el: Element, clientX: number, clientY: number): boolean {
+    if (pointInClientRects(el, clientX, clientY)) return false;
+    const view = el.ownerDocument.defaultView;
+    if (!view) return false;
+    return (
+        isInvisibleOverlayStyle(view.getComputedStyle(el, '::after')) ||
+        isInvisibleOverlayStyle(view.getComputedStyle(el, '::before'))
+    );
+}
+
+/**
+ * Topmost element at a point, looking through invisible click overlays so the
+ * user inspects what they see rather than the link whose ::after covers it.
+ */
+function visibleElementFromPoint(doc: Document, clientX: number, clientY: number): Element | null {
+    const hit = doc.elementFromPoint(clientX, clientY);
+    if (!hit || !isHitThroughInvisibleOverlay(hit, clientX, clientY)) return hit;
+
+    for (const el of doc.elementsFromPoint(clientX, clientY)) {
+        if (!isHitThroughInvisibleOverlay(el, clientX, clientY)) return el;
+    }
+    return hit;
+}
+
 /**
  * Deepest element at a viewport point, including inside open shadow trees.
- * Same as `document.elementFromPoint` on light-DOM-only pages.
+ * Same as `document.elementFromPoint` on light-DOM-only pages, except that
+ * invisible stretched-link overlays are looked through.
  */
 export function deepElementFromPoint(
     clientX: number,
     clientY: number,
     doc: Document = document,
 ): Element | null {
-    const hit = doc.elementFromPoint(clientX, clientY);
+    const hit = visibleElementFromPoint(doc, clientX, clientY);
     if (!hit) return null;
     return pierceOpenShadow(hit, clientX, clientY);
 }
