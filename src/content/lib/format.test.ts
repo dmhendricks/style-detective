@@ -73,10 +73,10 @@ describe('formatBackgroundImage', () => {
     it('shows the full URL, not just the file name', () => {
         expect(
             formatBackgroundImage(
-                'url("https://media.townhall.com/cdn/hodl/2026/194/8111978c-5bb2-42d5-bb24-768f8843d900-180x180.jpg")',
+                'url("https://cdn.example.com/images/2026/194/8111978c-5bb2-42d5-bb24-768f8843d900-180x180.jpg")',
             ),
         ).toBe(
-            'https://media.townhall.com/cdn/hodl/2026/194/8111978c-5bb2-42d5-bb24-768f8843d900-180x180.jpg',
+            'https://cdn.example.com/images/2026/194/8111978c-5bb2-42d5-bb24-768f8843d900-180x180.jpg',
         );
     });
 
