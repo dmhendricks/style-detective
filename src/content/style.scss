@@ -198,12 +198,22 @@
     max-width: var(--sd-max-width) !important;
     // Never grow taller than the viewport (less a strip at the bottom for the
     // browser's link-URL preview); a long property list scrolls in &__center.
-    max-height: calc(100vh - 25px) !important;
+    // core.ts sets --sd-max-height when stacking the panel above/below the
+    // cursor on narrow viewports.
+    max-height: var(--sd-max-height, calc(100vh - 25px)) !important;
     overflow: hidden !important;
     color: var(--sd-text) !important;
     background: var(--sd-panel-bg) !important;
     border-radius: var(--sd-radius) !important;
     box-shadow: var(--sd-shadow) !important;
+
+    // While tracking, hits fall through to the page. A panel that catches the
+    // cursor stops following it (core.ts ignores panel hits) and pins the
+    // pointer against the screen edge. Freezing makes it clickable.
+    &:not(.StyleDetectiveOverlay--frozen),
+    &:not(.StyleDetectiveOverlay--frozen) * {
+        pointer-events: none !important;
+    }
 
     // Title banner. CSS-drawn (replaces the old fixed-height header PNG): a
     // solid red base with a diagonal stripe overlay. Long selectors are clamped

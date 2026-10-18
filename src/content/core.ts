@@ -37,6 +37,7 @@ import {
     updatePanel,
 } from './lib/panel';
 import { formatClassesForCopy, parseClassTokens } from './lib/classes';
+import { computePanelPlacement, type PanelSide } from './lib/placement';
 import {
     clampPanelFontSize,
     loadClassesChipLines,
@@ -84,6 +85,9 @@ const HIGHLIGHT_LAYOUT_OPTS: AddEventListenerOptions = { capture: true, passive:
 const IS_TOP_FRAME = window === window.top;
 
 const SYSTEM_DARK_QUERY = '(prefers-color-scheme: dark)';
+
+/** Height cap for stacked (above/below pointer) placement; read by style.scss. */
+const PANEL_MAX_HEIGHT_VAR = '--sd-max-height';
 
 /**
  * Only trustworthy in the top frame: inside an iframe this follows the
@@ -261,6 +265,8 @@ class OverlayController {
     private pointerInFrame = false;
     private pendingPanelPointer: { clientX: number; clientY: number } | null = null;
     private panelPositionFrame: number | null = null;
+    /** Last placement side, fed back for hysteresis at swap points. */
+    private panelSide: PanelSide | undefined;
     private claimFrame: number | null = null;
     /** Coalesce same-target style refreshes (avoids thrash while :hover flickers). */
     private styleRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -423,6 +429,7 @@ class OverlayController {
         this.inspectedElement = null;
         this.pointerInFrame = false;
         this.lastPointer = null;
+        this.panelSide = undefined;
         this.cancelScheduledPanelPosition();
         this.cancelStyleRefresh();
         if (this.claimFrame !== null) {
@@ -813,30 +820,28 @@ class OverlayController {
         const block = this.ensurePanel();
         this.claimOverlay();
         block.style.display = 'flex';
+        // Measure the natural height — a cap from a stacked placement would skew it.
+        block.style.removeProperty(PANEL_MAX_HEIGHT_VAR);
 
-        const MARGIN = 8;
-        const BOTTOM_MARGIN = 40;
-        const pageWidth = window.innerWidth;
-        const pageHeight = window.innerHeight - BOTTOM_MARGIN;
-        const blockWidth = block.offsetWidth;
-        const blockHeight = block.offsetHeight;
+        const placement = computePanelPlacement({
+            pointerX: e.clientX,
+            pointerY: e.clientY,
+            panelWidth: block.offsetWidth,
+            panelHeight: block.offsetHeight,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            previousSide: this.panelSide,
+        });
+        this.panelSide = placement.side;
 
-        // Client coordinates match position:fixed left/top.
-        let left = e.clientX + 20;
-        if (e.clientX + blockWidth > pageWidth) {
-            left = e.clientX - blockWidth - 40;
-            if (left < MARGIN) left = MARGIN;
+        // Client coordinates match position:fixed left/top. Already clamped to
+        // the viewport, so no keepOverlayInViewport (it could nudge the panel
+        // back under the cursor).
+        block.style.left = `${placement.left}px`;
+        block.style.top = `${placement.top}px`;
+        if (placement.maxHeight !== null) {
+            block.style.setProperty(PANEL_MAX_HEIGHT_VAR, `${placement.maxHeight}px`);
         }
-
-        let top = e.clientY + 20;
-        if (e.clientY + blockHeight > pageHeight) {
-            top = e.clientY - blockHeight - 20;
-            if (top < MARGIN) top = MARGIN;
-        }
-
-        block.style.left = `${left}px`;
-        block.style.top = `${top}px`;
-        keepOverlayInViewport(block);
     }
 
     private schedulePanelPosition(e: { clientX: number; clientY: number }): void {

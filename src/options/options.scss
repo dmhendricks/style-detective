@@ -369,8 +369,9 @@ body {
     pointer-events: none;
     user-select: none;
 
+    // !important: the overlay stylesheet makes an unfrozen panel pass-through.
     #StyleDetectiveOverlay__center {
-        pointer-events: auto;
+        pointer-events: auto !important;
     }
 }
 
