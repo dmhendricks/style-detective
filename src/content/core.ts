@@ -252,8 +252,14 @@ function buildJsonDefinition(el: HTMLElement, style: CSSStyleDeclaration): strin
  * and panel positioning. Construct once per content-script boot.
  */
 class OverlayController {
-    /** Distinguishes this frame's controller when broadcasting overlay claims. */
-    private readonly instanceId = crypto.randomUUID();
+    /**
+     * Distinguishes this frame's controller when broadcasting overlay claims.
+     * Not crypto.randomUUID(): that only exists in secure contexts, so it threw
+     * at boot on plain-http pages.
+     */
+    private readonly instanceId = Array.from(crypto.getRandomValues(new Uint32Array(4)), (n) =>
+        n.toString(16).padStart(8, '0'),
+    ).join('');
 
     /** Tab-wide arm state (synced via the service worker). */
     private armed = false;
@@ -1063,20 +1069,23 @@ class OverlayController {
 
 // === Entry point ===
 
-const controller = new OverlayController();
-const ready = controller.loadPrefs().catch(() => {
-    // Prefs unavailable (orphaned script / restricted frame) — keep defaults.
-});
-
-// Attach styles from JS — declared content_scripts CSS often misses
-// document.write() about:blank result frames (e.g. W3Schools Tryit).
-ensureOverlayStyles();
-
 const BOOT_FLAG = '__styleDetectiveBooted__';
 const bootRoot = globalThis as typeof globalThis & { [BOOT_FLAG]?: boolean };
 
+// The content script is a standalone bundle, so re-injection (toolbar click on
+// an orphaned tab) re-runs this whole file. Everything stateful stays behind
+// the flag so a second run doesn't build a second controller or listeners.
 if (!bootRoot[BOOT_FLAG]) {
     bootRoot[BOOT_FLAG] = true;
+
+    const controller = new OverlayController();
+    const ready = controller.loadPrefs().catch(() => {
+        // Prefs unavailable (orphaned script / restricted frame) — keep defaults.
+    });
+
+    // Attach styles from JS — declared content_scripts CSS often misses
+    // document.write() about:blank result frames (e.g. W3Schools Tryit).
+    ensureOverlayStyles();
 
     try {
         chrome.runtime?.onMessage.addListener((raw, _sender, sendResponse) => {

@@ -36,7 +36,14 @@ const injectManifestVersion: Plugin = {
 
 export default defineConfig({
   plugins: [
-    crx({ manifest: manifest as unknown as ManifestV3Export }),
+    crx({
+      manifest: manifest as unknown as ManifestV3Export,
+      // One self-contained IIFE instead of a loader that import()s the real
+      // script from chrome-extension://. Chrome blocks that import in some
+      // throwaway iframes (e.g. hidden probe frames pages create and remove),
+      // which showed up as "Unsafe attempt to load URL" extension errors.
+      contentScripts: { standaloneFiles: ['src/content/core.ts'] },
+    }),
     injectManifestVersion,
     copyLicense,
   ],
